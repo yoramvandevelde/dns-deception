@@ -1,0 +1,12 @@
+# Build output
+/dns-deception
+
+# Go
+*.test
+*.out
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
