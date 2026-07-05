@@ -192,13 +192,52 @@ func loadSecretKey(flagValue string) ([]byte, error) {
 	return nil, fmt.Errorf("secret key required: set %s (hex-encoded, e.g. via `openssl rand -hex 32`) or pass --key", secretKeyEnvVar)
 }
 
+func envOrDefault(key, defaultVal string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
+	}
+	return defaultVal
+}
+
+func uintEnvOrDefault(key string, defaultVal uint) uint {
+	if v, ok := os.LookupEnv(key); ok {
+		if parsed, err := strconv.ParseUint(v, 10, 32); err == nil {
+			return uint(parsed)
+		}
+	}
+	return defaultVal
+}
+
+func parseDomainEnv(val string) []domainConfig {
+	if val == "" {
+		return nil
+	}
+	var domains []domainConfig
+	for _, part := range strings.Split(val, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		zone, upstream, _ := strings.Cut(part, "=")
+		if zone == "" {
+			log.Fatalf("invalid domain %q in DECEPTION_DOMAINS", part)
+		}
+		domains = append(domains, domainConfig{
+			zone:     dns.Fqdn(strings.ToLower(zone)),
+			upstream: upstream,
+		})
+	}
+	return domains
+}
+
 func main() {
-	listenAddr := flag.String("listen", ":5353", "address to listen on")
-	defaultUpstream := flag.String("upstream", "1.1.1.1:53", "default upstream resolver/authoritative server, used for --domain entries without their own upstream")
+	listenAddr := flag.String("listen", envOrDefault("DECEPTION_LISTEN", ":5353"), "address to listen on (env: DECEPTION_LISTEN)")
+	defaultUpstream := flag.String("upstream", envOrDefault("DECEPTION_UPSTREAM", "1.1.1.1:53"), "default upstream resolver/authoritative server, used for --domain entries without their own upstream (env: DECEPTION_UPSTREAM)")
 	keyHex := flag.String("key", "", "hex-encoded secret key (insecure fallback, prefer the "+secretKeyEnvVar+" env var)")
-	ttl := flag.Uint("ttl", 60, "TTL for synthesized records")
+	ttl := flag.Uint("ttl", uintEnvOrDefault("DECEPTION_TTL", 60), "TTL for synthesized records (env: DECEPTION_TTL)")
 	var domainList domainFlag
-	flag.Var(&domainList, "domain", "zone this server handles, optionally with its own upstream: zone[=upstream_host:port] (repeatable, at least one required)")
+	domainList = parseDomainEnv(os.Getenv("DECEPTION_DOMAINS"))
+	flag.Var(&domainList, "domain", "zone this server handles, optionally with its own upstream: zone[=upstream_host:port] (repeatable, at least one required; env: DECEPTION_DOMAINS comma-separated)")
 	flag.Parse()
 
 	if len(domainList) == 0 {
