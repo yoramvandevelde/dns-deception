@@ -77,3 +77,17 @@ dig @127.0.0.1 -p 5353 not-my-domain.com A
   local/ULA/multicast-ish bytes for IPv6) get swapped for a fixed fallback.
 - Non-A/AAAA queries on non-existent names just relay upstream's real
   response code (no synthesis for TXT/MX/NS/etc.).
+
+## TODO
+
+- [ ] **More fake record types** — synthesize TXT, MX, CNAME, NS, SOA in
+  addition to A/AAAA for non-existent names.
+- [ ] **Health endpoint** — HTTP `/healthz` for K8s liveness/readiness probes.
+- [ ] **Graceful shutdown** — catch SIGTERM, drain in-flight queries before
+  exiting.
+- [ ] **Dual-source configuration** — every option available via environment
+  variable *and* CLI flag (container-first, developer-friendly).
+- [ ] **Structured JSON logging** — machine-parseable output for Loki/Elastic
+  aggregation.
+- [ ] **Prometheus metrics endpoint** — expose `queries_total` counter
+  labelled by record type, fake vs real, and rcode.
