@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dns-deception
+  labels:
+    app: dns-deception
+data:
+  DECEPTION_LISTEN: ":5353"
+  DECEPTION_HTTP: ":8080"
+  DECEPTION_UPSTREAM: "1.1.1.1:53"
+  DECEPTION_TTL: "60"
+  # DECEPTION_DOMAINS: "example.com=1.1.1.1:53,other.org=8.8.8.8:53"

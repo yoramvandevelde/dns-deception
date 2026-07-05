@@ -86,6 +86,23 @@ dig @127.0.0.1 -p 5353 asdkjhqwe123.example.com A +short   # same IP again
 dig @127.0.0.1 -p 5353 not-my-domain.com A
 ```
 
+## Kubernetes
+
+Manifests in [`k8s/`](./k8s/).
+
+```sh
+# Update the image tag in k8s/deployment.yaml, set your domains in
+# k8s/configmap.yaml, then create the secret:
+kubectl create secret generic dns-deception \
+  --from-literal=DECEPTION_SECRET_KEY=$(openssl rand -hex 32)
+
+# Deploy:
+kubectl apply -k k8s/
+
+# Check:
+kubectl rollout status deploy/dns-deception
+```
+
 ## Notes
 
 - Fake IPs can land on arbitrary public addresses by design, this isn't
