@@ -50,6 +50,7 @@ export DECEPTION_SECRET_KEY=$(openssl rand -hex 32)
 | `--domain`    | `DECEPTION_DOMAINS`        | `zone[=upstream_host:port]`, repeatable or comma-separated. Required.|
 | `--upstream`  | `DECEPTION_UPSTREAM`       | Default upstream for `--domain` entries without their own.           |
 | `--ttl`       | `DECEPTION_TTL`            | TTL on synthesized records. Default `60`.                             |
+| `--http`      | `DECEPTION_HTTP`           | HTTP listen address for `/healthz` and `/readyz`. Default `:8080`.  |
 | `--key`       | `DECEPTION_SECRET_KEY`     | Secret key as hex (insecure fallback — prefer the env var).         |
 
 All flags have a corresponding environment variable. CLI flags take
@@ -84,7 +85,7 @@ dig @127.0.0.1 -p 5353 not-my-domain.com A
 
 - [ ] **More fake record types** — synthesize TXT, MX, CNAME, NS, SOA in
   addition to A/AAAA for non-existent names.
-- [ ] **Health endpoint** — HTTP `/healthz` for K8s liveness/readiness probes.
+- [x] **Health endpoint** — HTTP `/healthz` for K8s liveness/readiness probes.
 - [ ] **Graceful shutdown** — catch SIGTERM, drain in-flight queries before
   exiting.
 - [x] **Dual-source configuration** — every option available via environment

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -230,8 +231,19 @@ func parseDomainEnv(val string) []domainConfig {
 	return domains
 }
 
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
+func readyHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
+
 func main() {
 	listenAddr := flag.String("listen", envOrDefault("DECEPTION_LISTEN", ":5353"), "address to listen on (env: DECEPTION_LISTEN)")
+	httpAddr := flag.String("http", envOrDefault("DECEPTION_HTTP", ":8080"), "HTTP listen address for /healthz and /readyz (env: DECEPTION_HTTP)")
 	defaultUpstream := flag.String("upstream", envOrDefault("DECEPTION_UPSTREAM", "1.1.1.1:53"), "default upstream resolver/authoritative server, used for --domain entries without their own upstream (env: DECEPTION_UPSTREAM)")
 	keyHex := flag.String("key", "", "hex-encoded secret key (insecure fallback, prefer the "+secretKeyEnvVar+" env var)")
 	ttl := flag.Uint("ttl", uintEnvOrDefault("DECEPTION_TTL", 60), "TTL for synthesized records (env: DECEPTION_TTL)")
@@ -269,6 +281,18 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
+
+	http.HandleFunc("/healthz", healthHandler)
+	http.HandleFunc("/readyz", readyHandler)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		log.Printf("HTTP server listening on %s", *httpAddr)
+		if err := http.ListenAndServe(*httpAddr, nil); err != nil {
+			log.Printf("HTTP server error: %v", err)
+		}
+	}()
+
 	for _, network := range []string{"udp", "tcp"} {
 		wg.Add(1)
 		go func(network string) {
