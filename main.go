@@ -228,6 +228,9 @@ func handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	m := new(dns.Msg)
 	m.SetReply(r)
+	if opt := r.IsEdns0(); opt != nil {
+		m.SetEdns0(opt.UDPSize(), opt.Do())
+	}
 
 	up, ok := upstreamFor(q.Name)
 	if !ok {
