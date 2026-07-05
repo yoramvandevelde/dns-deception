@@ -29,8 +29,22 @@ plain `REFUSED`.
 
 ## Build
 
+### Local
+
 ```sh
 go build -o dns-deception .
+```
+
+### Container
+
+```sh
+docker build -t dns-deception .
+docker run -d \
+  -e DECEPTION_SECRET_KEY=$(openssl rand -hex 32) \
+  -e DECEPTION_DOMAINS="example.com=1.1.1.1:53" \
+  -p 5353:5353/udp -p 5353:5353/tcp \
+  -p 8080:8080 \
+  dns-deception
 ```
 
 ## Usage
