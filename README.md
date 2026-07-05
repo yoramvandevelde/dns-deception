@@ -78,12 +78,13 @@ dig @127.0.0.1 -p 5353 not-my-domain.com A
   restricted to a subnet you own. Only first-octet/first-byte values that
   look obviously reserved (`10`/`127`/`172`/`192` for IPv4; loopback/link-
   local/ULA/multicast-ish bytes for IPv6) get swapped for a fixed fallback.
-- Non-A/AAAA queries on non-existent names just relay upstream's real
-  response code (no synthesis for TXT/MX/NS/etc.).
+- TXT and MX queries on non-existent names are also synthesized (SPF-like
+  TXT and a plausible MX target). NS, SOA, CNAME and other types relay the
+  upstream's real response code.
 
 ## TODO
 
-- [ ] **More fake record types** — synthesize TXT, MX, CNAME, NS, SOA in
+- [x] **More fake record types** — synthesize TXT (SPF-like) and MX in
   addition to A/AAAA for non-existent names.
 - [x] **Health endpoint** — HTTP `/healthz` for K8s liveness/readiness probes.
 - [x] **Graceful shutdown** — catch SIGTERM/SIGINT, drain in-flight queries

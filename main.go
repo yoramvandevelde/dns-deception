@@ -70,6 +70,17 @@ func upstreamFor(qname string) (string, bool) {
 	return "", false
 }
 
+// zoneFor returns the matching configured zone for qname.
+func zoneFor(qname string) string {
+	normalized := dns.Fqdn(strings.ToLower(qname))
+	for _, d := range domains {
+		if dns.IsSubDomain(d.zone, normalized) {
+			return d.zone
+		}
+	}
+	return ""
+}
+
 var blockedIPv4FirstOctets = map[byte]bool{10: true, 127: true, 172: true, 192: true}
 
 const ipv4FirstOctetFallback = 45
@@ -121,6 +132,24 @@ func fakeIPv6For(qname string) net.IP {
 	return addr
 }
 
+// fakeTXTFor returns a SPF-like TXT record unique per qname.
+func fakeTXTFor(qname, zone string) string {
+	digest := hashFor(qname, "TXT")
+	return fmt.Sprintf("v=spf1 redirect=_%s.%s", hex.EncodeToString(digest[:4]), strings.TrimSuffix(zone, "."))
+}
+
+// fakeMXPrefFor returns a deterministic MX preference (1-50) for qname.
+func fakeMXPrefFor(qname string) uint16 {
+	digest := hashFor(qname, "MX")
+	return uint16(digest[0])%50 + 1
+}
+
+// fakeMXTargetFor returns a deterministic MX target for qname.
+func fakeMXTargetFor(qname, zone string) string {
+	digest := hashFor(qname, "MX")
+	return fmt.Sprintf("mail-%s.%s.", hex.EncodeToString(digest[:4]), strings.TrimSuffix(zone, "."))
+}
+
 func handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	if len(r.Question) == 0 {
 		dns.HandleFailed(w, r)
@@ -163,7 +192,6 @@ func handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 		m.Rcode = dns.RcodeSuccess
 
 	case q.Qtype == dns.TypeAAAA:
-		// Same treatment for IPv6 queries.
 		rr := &dns.AAAA{
 			Hdr:  dns.RR_Header{Name: q.Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: fakeTTL},
 			AAAA: fakeIPv6For(q.Name),
@@ -171,8 +199,26 @@ func handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 		m.Answer = append(m.Answer, rr)
 		m.Rcode = dns.RcodeSuccess
 
+	case q.Qtype == dns.TypeTXT:
+		zone := zoneFor(q.Name)
+		rr := &dns.TXT{
+			Hdr: dns.RR_Header{Name: q.Name, Rrtype: dns.TypeTXT, Class: dns.ClassINET, Ttl: fakeTTL},
+			Txt: []string{fakeTXTFor(q.Name, zone)},
+		}
+		m.Answer = append(m.Answer, rr)
+		m.Rcode = dns.RcodeSuccess
+
+	case q.Qtype == dns.TypeMX:
+		zone := zoneFor(q.Name)
+		rr := &dns.MX{
+			Hdr:        dns.RR_Header{Name: q.Name, Rrtype: dns.TypeMX, Class: dns.ClassINET, Ttl: fakeTTL},
+			Preference: fakeMXPrefFor(q.Name),
+			Mx:         fakeMXTargetFor(q.Name, zone),
+		}
+		m.Answer = append(m.Answer, rr)
+		m.Rcode = dns.RcodeSuccess
+
 	default:
-		// Other query types on nonexistent names: relay upstream's behavior.
 		if resp != nil {
 			m.Rcode = resp.Rcode
 		} else {
@@ -180,7 +226,9 @@ func handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 		}
 	}
 
-	_ = w.WriteMsg(m)
+	if err := w.WriteMsg(m); err != nil {
+		log.Printf("Error writing response: %v", err)
+	}
 }
 
 const secretKeyEnvVar = "DECEPTION_SECRET_KEY"
