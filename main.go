@@ -16,11 +16,64 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/miekg/dns"
 )
+
+type metricType int
+
+const (
+	metricA metricType = iota
+	metricAAAA
+	metricTXT
+	metricMX
+	metricOther
+)
+
+type metricResult int
+
+const (
+	resultReal metricResult = iota
+	resultFake
+	resultRefused
+)
+
+type metrics struct {
+	counters [5][3]atomic.Int64
+}
+
+func (m *metrics) inc(t metricType, r metricResult) {
+	m.counters[t][r].Add(1)
+}
+
+func (m *metrics) write(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	fmt.Fprintln(w, "# HELP dns_queries_total Total DNS queries handled")
+	fmt.Fprintln(w, "# TYPE dns_queries_total counter")
+	typeNames := map[metricType]string{
+		metricA:     "A",
+		metricAAAA:  "AAAA",
+		metricTXT:   "TXT",
+		metricMX:    "MX",
+		metricOther: "other",
+	}
+	resultNames := map[metricResult]string{
+		resultReal:    "real",
+		resultFake:    "fake",
+		resultRefused: "refused",
+	}
+	for ti := metricA; ti <= metricOther; ti++ {
+		for ri := resultReal; ri <= resultRefused; ri++ {
+			val := m.counters[ti][ri].Load()
+			fmt.Fprintf(w, "dns_queries_total{type=%q,result=%q} %d\n", typeNames[ti], resultNames[ri], val)
+		}
+	}
+}
+
+var queryMetrics metrics
 
 var (
 	secretKey []byte
@@ -150,21 +203,36 @@ func fakeMXTargetFor(qname, zone string) string {
 	return fmt.Sprintf("mail-%s.%s.", hex.EncodeToString(digest[:4]), strings.TrimSuffix(zone, "."))
 }
 
+func qtypeToMetric(qtype uint16) metricType {
+	switch qtype {
+	case dns.TypeA:
+		return metricA
+	case dns.TypeAAAA:
+		return metricAAAA
+	case dns.TypeTXT:
+		return metricTXT
+	case dns.TypeMX:
+		return metricMX
+	default:
+		return metricOther
+	}
+}
+
 func handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	if len(r.Question) == 0 {
 		dns.HandleFailed(w, r)
 		return
 	}
 	q := r.Question[0]
+	t := qtypeToMetric(q.Qtype)
 
 	m := new(dns.Msg)
 	m.SetReply(r)
 
 	up, ok := upstreamFor(q.Name)
 	if !ok {
-		// Not one of our configured zones -> refuse, same as a nameserver
-		// that isn't authoritative for the requested domain.
 		m.Rcode = dns.RcodeRefused
+		queryMetrics.inc(t, resultRefused)
 		_ = w.WriteMsg(m)
 		return
 	}
@@ -178,18 +246,18 @@ func handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	switch {
 	case err == nil && resp != nil && resp.Rcode == dns.RcodeSuccess && len(resp.Answer) > 0:
-		// Real record exists upstream -> pass through unchanged.
 		m.Answer = resp.Answer
 		m.Rcode = dns.RcodeSuccess
+		queryMetrics.inc(t, resultReal)
 
 	case q.Qtype == dns.TypeA:
-		// No existing answer -> synthesize a fake A record instead of NXDOMAIN.
 		rr := &dns.A{
 			Hdr: dns.RR_Header{Name: q.Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: fakeTTL},
 			A:   fakeIPv4For(q.Name),
 		}
 		m.Answer = append(m.Answer, rr)
 		m.Rcode = dns.RcodeSuccess
+		queryMetrics.inc(t, resultFake)
 
 	case q.Qtype == dns.TypeAAAA:
 		rr := &dns.AAAA{
@@ -198,6 +266,7 @@ func handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 		}
 		m.Answer = append(m.Answer, rr)
 		m.Rcode = dns.RcodeSuccess
+		queryMetrics.inc(t, resultFake)
 
 	case q.Qtype == dns.TypeTXT:
 		zone := zoneFor(q.Name)
@@ -207,6 +276,7 @@ func handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 		}
 		m.Answer = append(m.Answer, rr)
 		m.Rcode = dns.RcodeSuccess
+		queryMetrics.inc(t, resultFake)
 
 	case q.Qtype == dns.TypeMX:
 		zone := zoneFor(q.Name)
@@ -217,6 +287,7 @@ func handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 		}
 		m.Answer = append(m.Answer, rr)
 		m.Rcode = dns.RcodeSuccess
+		queryMetrics.inc(t, resultFake)
 
 	default:
 		if resp != nil {
@@ -224,6 +295,7 @@ func handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 		} else {
 			m.Rcode = dns.RcodeServerFailure
 		}
+		queryMetrics.inc(t, resultReal)
 	}
 
 	if err := w.WriteMsg(m); err != nil {
@@ -292,6 +364,10 @@ func readyHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("ok"))
 }
 
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	queryMetrics.write(w)
+}
+
 func main() {
 	listenAddr := flag.String("listen", envOrDefault("DECEPTION_LISTEN", ":5353"), "address to listen on (env: DECEPTION_LISTEN)")
 	httpAddr := flag.String("http", envOrDefault("DECEPTION_HTTP", ":8080"), "HTTP listen address for /healthz and /readyz (env: DECEPTION_HTTP)")
@@ -336,6 +412,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthHandler)
 	mux.HandleFunc("/readyz", readyHandler)
+	mux.HandleFunc("/metrics", metricsHandler)
 	httpSrv := &http.Server{Addr: *httpAddr, Handler: mux}
 
 	var dnsSrvs []*dns.Server

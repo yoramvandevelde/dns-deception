@@ -20,8 +20,8 @@ This server sits in front of your real (authoritative) nameserver:
   IPs.
 
 Net effect: the "are two random names equal?" wildcard check fails to detect
-anything, the tool proceeds to bruteforce, and every single guess "resolves"
-— burying real hits in noise. It's aimed at simpler/naive tooling, not at
+anything, the tool proceeds to bruteforce, and every single guess "resolves" 
+burying real hits in noise. It's aimed at simpler/naive tooling, not at
 defeating advanced set-based wildcard detection.
 
 Only domains you explicitly configure are served; everything else gets a
@@ -74,7 +74,7 @@ dig @127.0.0.1 -p 5353 not-my-domain.com A
 
 ## Notes
 
-- Fake IPs can land on arbitrary public addresses — by design, this isn't
+- Fake IPs can land on arbitrary public addresses by design, this isn't
   restricted to a subnet you own. Only first-octet/first-byte values that
   look obviously reserved (`10`/`127`/`172`/`192` for IPv4; loopback/link-
   local/ULA/multicast-ish bytes for IPv6) get swapped for a fixed fallback.
@@ -84,14 +84,13 @@ dig @127.0.0.1 -p 5353 not-my-domain.com A
 
 ## TODO
 
-- [x] **More fake record types** — synthesize TXT (SPF-like) and MX in
+- [x] **More fake record types**: synthesize TXT (SPF-like) and MX in
   addition to A/AAAA for non-existent names.
-- [x] **Health endpoint** — HTTP `/healthz` for K8s liveness/readiness probes.
-- [x] **Graceful shutdown** — catch SIGTERM/SIGINT, drain in-flight queries
+- [x] **Health endpoint**: HTTP `/healthz` for K8s liveness/readiness probes.
+- [x] **Graceful shutdown**: catch SIGTERM/SIGINT, drain in-flight queries
   before exiting.
-- [x] **Dual-source configuration** — every option available via environment
+- [x] **Dual-source configuration**: every option available via environment
   variable *and* CLI flag (container-first, developer-friendly).
-- [ ] **Structured JSON logging** — machine-parseable output for Loki/Elastic
-  aggregation.
-- [ ] **Prometheus metrics endpoint** — expose `queries_total` counter
-  labelled by record type, fake vs real, and rcode.
+- [x] **Prometheus metrics endpoint**: expose `dns_queries_total` counter
+  labelled by type (A/AAAA/TXT/MX/other) and result (real/fake/refused)
+  on `/metrics`.
