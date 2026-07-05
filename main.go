@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,10 +11,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/miekg/dns"
@@ -282,27 +285,46 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	http.HandleFunc("/healthz", healthHandler)
-	http.HandleFunc("/readyz", readyHandler)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", healthHandler)
+	mux.HandleFunc("/readyz", readyHandler)
+	httpSrv := &http.Server{Addr: *httpAddr, Handler: mux}
+
+	var dnsSrvs []*dns.Server
+	for _, network := range []string{"udp", "tcp"} {
+		srv := &dns.Server{Addr: *listenAddr, Net: network}
+		dnsSrvs = append(dnsSrvs, srv)
+		wg.Add(1)
+		go func(s *dns.Server, net string) {
+			defer wg.Done()
+			log.Printf("deception server listening on %s/%s", s.Addr, net)
+			if err := s.ListenAndServe(); err != nil {
+				log.Printf("%s server error: %v", net, err)
+			}
+		}(srv, network)
+	}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		log.Printf("HTTP server listening on %s", *httpAddr)
-		if err := http.ListenAndServe(*httpAddr, nil); err != nil {
+		log.Printf("HTTP server listening on %s", httpSrv.Addr)
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("HTTP server error: %v", err)
 		}
 	}()
 
-	for _, network := range []string{"udp", "tcp"} {
-		wg.Add(1)
-		go func(network string) {
-			defer wg.Done()
-			server := &dns.Server{Addr: *listenAddr, Net: network}
-			log.Printf("deception server listening on %s/%s", *listenAddr, network)
-			if err := server.ListenAndServe(); err != nil {
-				log.Fatalf("%s server error: %v", network, err)
-			}
-		}(network)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+	<-sig
+	log.Print("shutting down...")
+
+	for _, s := range dnsSrvs {
+		s.Shutdown()
 	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	httpSrv.Shutdown(shutdownCtx)
+
 	wg.Wait()
 }

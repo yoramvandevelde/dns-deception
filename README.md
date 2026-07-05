@@ -86,8 +86,8 @@ dig @127.0.0.1 -p 5353 not-my-domain.com A
 - [ ] **More fake record types** — synthesize TXT, MX, CNAME, NS, SOA in
   addition to A/AAAA for non-existent names.
 - [x] **Health endpoint** — HTTP `/healthz` for K8s liveness/readiness probes.
-- [ ] **Graceful shutdown** — catch SIGTERM, drain in-flight queries before
-  exiting.
+- [x] **Graceful shutdown** — catch SIGTERM/SIGINT, drain in-flight queries
+  before exiting.
 - [x] **Dual-source configuration** — every option available via environment
   variable *and* CLI flag (container-first, developer-friendly).
 - [ ] **Structured JSON logging** — machine-parseable output for Loki/Elastic
