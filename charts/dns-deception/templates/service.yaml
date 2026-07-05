@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dns-deception.fullname" . }}
+  labels:
+    {{- include "dns-deception.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "dns-deception.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: dns-udp
+      port: {{ .Values.service.port }}
+      protocol: UDP
+      targetPort: 5353
+    - name: dns-tcp
+      port: {{ .Values.service.port }}
+      protocol: TCP
+      targetPort: 5353
+    - name: http
+      port: {{ .Values.service.httpPort }}
+      protocol: TCP
+      targetPort: 8080

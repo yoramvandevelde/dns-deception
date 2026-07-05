@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dns-deception.fullname" . }}
+  labels:
+    {{- include "dns-deception.labels" . | nindent 4 }}
+data:
+  DECEPTION_LISTEN: {{ .Values.dns.listen | quote }}
+  DECEPTION_HTTP: {{ .Values.dns.http | quote }}
+  DECEPTION_UPSTREAM: {{ .Values.dns.upstream | quote }}
+  DECEPTION_TTL: {{ .Values.dns.ttl | quote }}
+  DECEPTION_DOMAINS: {{ include "dns-deception.domains" . | quote }}

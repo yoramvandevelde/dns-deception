@@ -1,0 +1,41 @@
+# SPDX-Identifier: MIT
+# Default values for dns-deception.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  repository: ghcr.io/dns-deception
+  tag: latest
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+dns:
+  listen: ":5353"
+  http: ":8080"
+  upstream: "1.1.1.1:53"
+  ttl: 60
+  domains:
+    - zone: example.com
+      upstream: "1.1.1.1:53"
+
+secret:
+  # Set to empty string to skip creating a Secret resource (manage externally).
+  # Generate with: openssl rand -hex 32
+  decryptionKey: ""
+
+service:
+  type: ClusterIP
+  port: 5353
+  httpPort: 8080
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 16Mi
+  limits:
+    cpu: 200m
+    memory: 64Mi
+
+replicaCount: 1

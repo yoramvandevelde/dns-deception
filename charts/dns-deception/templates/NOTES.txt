@@ -1,0 +1,9 @@
+Thank you for installing {{ .Chart.Name }}.
+
+The deployment is configured with {{ .Values.replicaCount }} replica(s).
+
+To test it:
+  export POD=$(kubectl get pods -l "app.kubernetes.io/name={{ include "dns-deception.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o name | head -n 1)
+  kubectl exec "$POD" -- /dns-deception --help
+
+Metrics available at {{ .Values.dns.http }}/metrics

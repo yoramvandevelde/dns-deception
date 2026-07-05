@@ -88,18 +88,25 @@ dig @127.0.0.1 -p 5353 not-my-domain.com A
 
 ## Kubernetes
 
+### Helm chart (recommended)
+
+```sh
+helm install dns-deception charts/dns-deception \
+  --set secret.decryptionKey=$(openssl rand -hex 32) \
+  --set dns.domains[0].zone=example.com \
+  --set dns.domains[0].upstream=1.1.1.1:53
+```
+
+See [`charts/dns-deception/values.yaml`](./charts/dns-deception/values.yaml) for all available options.
+
+### Raw manifests
+
 Manifests in [`k8s/`](./k8s/).
 
 ```sh
-# Update the image tag in k8s/deployment.yaml, set your domains in
-# k8s/configmap.yaml, then create the secret:
 kubectl create secret generic dns-deception \
   --from-literal=DECEPTION_SECRET_KEY=$(openssl rand -hex 32)
-
-# Deploy:
 kubectl apply -k k8s/
-
-# Check:
 kubectl rollout status deploy/dns-deception
 ```
 
